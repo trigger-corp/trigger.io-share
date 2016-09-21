@@ -1,0 +1,7 @@
+{
+	"description": "Use the native sharing menu to share content from your app.",
+	"min_platform_version": "v2.4.6",
+	"namespace": "share",
+	"platform_version": "v2.4.6",
+	"version": "1.0"
+}

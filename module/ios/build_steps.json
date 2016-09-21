@@ -1,0 +1,6 @@
+[
+    { "do": { "set_in_info_plist": {
+        "key": "NSPhotoLibraryUsageDescription",
+        "value": "This app needs permission in order to save any images you wish to share with your photo library."
+    } } }
+]
