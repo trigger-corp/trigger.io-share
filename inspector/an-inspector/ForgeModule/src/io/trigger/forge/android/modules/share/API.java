@@ -1,9 +1,14 @@
 package io.trigger.forge.android.modules.share;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.net.Uri;
-import android.os.Environment;
+import android.os.Build;
+import android.support.v4.content.ContextCompat;
+import android.support.v4.content.FileProvider;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -14,10 +19,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
+import java.util.List;
 
 import io.trigger.forge.android.core.ForgeActivity;
 import io.trigger.forge.android.core.ForgeApp;
 import io.trigger.forge.android.core.ForgeIntentResultHandler;
+import io.trigger.forge.android.core.ForgeLog;
 import io.trigger.forge.android.core.ForgeParam;
 import io.trigger.forge.android.core.ForgeTask;
 
@@ -44,10 +51,11 @@ public class API {
 
         // create share intent
         final Intent intent = new Intent(android.content.Intent.ACTION_SEND);
+
         if (text != null && text.length() > 0) {
             intent.putExtra(Intent.EXTRA_TEXT, text);
         }
-        if (subject != null && subject.length() >0) {
+        if (subject != null && subject.length() > 0) {
             intent.putExtra(Intent.EXTRA_SUBJECT, subject);
         }
         if (image != null && image.length() > 0) {
@@ -83,9 +91,17 @@ public class API {
                         @Override
                         public void run() {
                             try {
-                                String path = cacheImage(image);
+                                Context context = ForgeApp.getActivity().getApplicationContext();
+                                File temp = cacheImage(image);
+                                Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".ForgeFileProvider", temp);
+                                ForgeLog.d("granting read permissions for uri: " + uri.toString());
                                 intent.setType("image/*");
-                                intent.putExtra(Intent.EXTRA_STREAM, Uri.fromFile(new File(path)));
+                                intent.putExtra(Intent.EXTRA_STREAM, uri);
+                                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                // see https://code.google.com/p/android/issues/detail?id=76683
+                                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
+                                    grantReadPermissionForUri(intent, uri);
+                                }
                                 ForgeApp.intentWithHandler(intent, handler);
                             } catch (Exception e) {
                                 task.error(e.getLocalizedMessage(), "UNEXPECTED_FAILURE", null);
@@ -98,23 +114,45 @@ public class API {
     }
 
 
-    private static String cacheImage(String image) throws IOException {
-        String path = Environment.getExternalStorageDirectory().getPath() +
-                "/" +
-                image.substring(image.lastIndexOf("/") + 1, image.length());
+    private static File cacheImage(String url) throws IOException {
+        Context context = ForgeApp.getActivity().getApplicationContext();
+        // TODO - Revert once Google has fixed: https://issuetracker.google.com/issues/37125252
+        //final File outputDir = context.getCacheDir();
+        File outputDir = ContextCompat.getExternalFilesDirs(context, null)[0];
 
-        URL url = new URL(image);
-        InputStream is = url.openStream();
-        OutputStream os = new FileOutputStream(path);
-        byte[] b = new byte[2048];
-        int length;
-        while ((length = is.read(b)) != -1) {
-            os.write(b, 0, length);
+
+        final String filename = url.substring(url.lastIndexOf("/") + 1, url.length());
+        final java.io.File tempFile = new java.io.File(outputDir, filename);
+        tempFile.createNewFile();
+
+        URL parsedUrl = new URL(url);
+        InputStream input = parsedUrl.openStream();
+        try {
+            OutputStream output = new FileOutputStream(tempFile);
+            try {
+                byte[] buffer = new byte[1024];
+                int bytesRead = 0;
+                while ((bytesRead = input.read(buffer, 0, buffer.length)) >= 0) {
+                    output.write(buffer, 0, bytesRead);
+                }
+                return tempFile;
+            } finally {
+                output.close();
+            }
+        } finally {
+            input.close();
         }
-        is.close();
-        os.close();
+    }
 
-        return path;
+    private static void grantReadPermissionForUri(final Intent intent, final Uri uri) {
+        // grant read permissions for apps receiving the intent
+        Context context = ForgeApp.getActivity().getApplicationContext();
+        List<ResolveInfo> resInfoList = context.getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+        for (ResolveInfo resolveInfo : resInfoList) {
+            String packageName = resolveInfo.activityInfo.packageName;
+            context.grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        }
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
     }
 }
 
