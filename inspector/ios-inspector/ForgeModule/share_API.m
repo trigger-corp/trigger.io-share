@@ -31,9 +31,11 @@ static dispatch_once_t onceToken;
     NSMutableArray *share = [NSMutableArray new];
     if ([content objectForKey:@"text"] != nil) {
         [share addObject:[content objectForKey:@"text"]];
-    } else if ([content objectForKey:@"url"] != nil) {
+    }
+    if ([content objectForKey:@"url"] != nil) {
         [share addObject:[NSURL URLWithString:[content objectForKey:@"url"]]];
-    } else if ([content objectForKey:@"image"]) {
+    }
+    if ([content objectForKey:@"image"]) {
         [share addObject:[UIImage imageWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:[content objectForKey:@"image"]]]]];
     }
 

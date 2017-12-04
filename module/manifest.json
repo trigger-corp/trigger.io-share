@@ -1,8 +1,8 @@
 {
-    "changes": "**Fixed:** Error when sharing images on Android Nougat",
+    "changes": "iOS can now simultaneously share `image`, `text` and `url` content types.",
     "description": "Use the native sharing menu to share content from your app.",
     "min_platform_version": "v2.6.3",
     "namespace": "share",
     "platform_version": "v2.6.3",
-    "version": "1.1"
+    "version": "1.2"
 }
