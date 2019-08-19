@@ -1,14 +1,18 @@
 package io.trigger.forge.android.modules.share;
 
 import android.Manifest;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Build;
-import android.support.v4.content.ContextCompat;
-import android.support.v4.content.FileProvider;
+import android.webkit.MimeTypeMap;
+
+import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
+import androidx.core.util.Pair;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -19,7 +23,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
+import java.net.URLConnection;
 import java.util.List;
+import java.util.UUID;
 
 import io.trigger.forge.android.core.ForgeActivity;
 import io.trigger.forge.android.core.ForgeApp;
@@ -92,10 +98,12 @@ public class API {
                         public void run() {
                             try {
                                 Context context = ForgeApp.getActivity().getApplicationContext();
-                                File temp = cacheImage(image);
-                                Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".ForgeFileProvider", temp);
+                                Pair<File, String> pair = cacheImage(image);
+                                File file = pair.first;
+                                String contentType = pair.second;
+                                Uri uri = FileProvider.getUriForFile(context, context.getPackageName() + ".ForgeFileProvider", file);
                                 ForgeLog.d("granting read permissions for uri: " + uri.toString());
-                                intent.setType("image/*");
+                                intent.setType(contentType);
                                 intent.putExtra(Intent.EXTRA_STREAM, uri);
                                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                                 // see https://code.google.com/p/android/issues/detail?id=76683
@@ -104,6 +112,8 @@ public class API {
                                 }
                                 ForgeApp.intentWithHandler(intent, handler);
                             } catch (Exception e) {
+                                e.printStackTrace();
+                                ForgeLog.e(e.toString());
                                 task.error(e.getLocalizedMessage(), "UNEXPECTED_FAILURE", null);
                             }
                         }
@@ -114,19 +124,25 @@ public class API {
     }
 
 
-    private static File cacheImage(String url) throws IOException {
+    private static Pair<File, String> cacheImage(String url) throws IOException {
         Context context = ForgeApp.getActivity().getApplicationContext();
         // TODO - Revert once Google has fixed: https://issuetracker.google.com/issues/37125252
         //final File outputDir = context.getCacheDir();
         File outputDir = ContextCompat.getExternalFilesDirs(context, null)[0];
 
+        // open connection to URL
+        URL parsedUrl = new URL(url);
+        URLConnection connection = parsedUrl.openConnection();
 
-        final String filename = url.substring(url.lastIndexOf("/") + 1, url.length());
+        // create a temporary file
+        String contentType = connection.getContentType();
+        String extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(contentType);
+        final String filename = UUID.randomUUID().toString() + "." + extension;
         final java.io.File tempFile = new java.io.File(outputDir, filename);
         tempFile.createNewFile();
 
-        URL parsedUrl = new URL(url);
-        InputStream input = parsedUrl.openStream();
+        // download URL
+        InputStream input = connection.getInputStream();
         try {
             OutputStream output = new FileOutputStream(tempFile);
             try {
@@ -135,7 +151,7 @@ public class API {
                 while ((bytesRead = input.read(buffer, 0, buffer.length)) >= 0) {
                     output.write(buffer, 0, bytesRead);
                 }
-                return tempFile;
+                return new Pair(tempFile, contentType);
             } finally {
                 output.close();
             }
@@ -143,6 +159,7 @@ public class API {
             input.close();
         }
     }
+
 
     private static void grantReadPermissionForUri(final Intent intent, final Uri uri) {
         // grant read permissions for apps receiving the intent
